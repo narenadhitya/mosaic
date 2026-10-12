@@ -1,0 +1,22 @@
+{
+  "name": "mosaic",
+  "version": "1.0.0",
+  "description": "Financial operations and transaction intelligence platform for Indian Residential Housing Societies",
+  "scripts": {
+    "dev:backend": "python backend/run.py",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build:frontend": "npm run build --prefix frontend"
+  },
+  "keywords": [
+    "fintech",
+    "housing-society",
+    "upi",
+    "bis-is-19671",
+    "dpdp-2023",
+    "iso-27001",
+    "merkle-tree",
+    "knowledge-graph"
+  ],
+  "author": "Naren Adhitya",
+  "license": "MIT"
+}
