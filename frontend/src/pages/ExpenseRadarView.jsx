@@ -12,10 +12,11 @@ import {
   ArrowUpRight,
   ShieldCheck,
   CreditCard,
-  Lightbulb
+  Lightbulb,
+  FileText
 } from 'lucide-react';
 
-export default function ExpenseRadarView({ homeData, onPayBill }) {
+export default function ExpenseRadarView({ homeData, onPayBill, onViewReceipt }) {
   const bills = homeData?.bills || [];
   const breakdown = homeData?.monthly_expense_breakdown || {};
   
@@ -175,10 +176,14 @@ export default function ExpenseRadarView({ homeData, onPayBill }) {
                 {matchingBill && (
                   <div>
                     {matchingBill.status === 'PAID' ? (
-                      <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Cleared</span>
-                      </span>
+                      <button
+                        onClick={() => onViewReceipt && onViewReceipt(matchingBill.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all shadow-sm group"
+                        title="View & Download Official Receipt"
+                      >
+                        <FileText className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                        <span>Receipt</span>
+                      </button>
                     ) : (
                       <button
                         onClick={() => onPayBill(matchingBill)}

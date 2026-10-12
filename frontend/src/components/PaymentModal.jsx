@@ -10,10 +10,11 @@ import {
   Lock,
   Loader2,
   Building2,
-  UserCheck
+  UserCheck,
+  FileText
 } from 'lucide-react';
 
-export default function PaymentModal({ isOpen, onClose, bill, onPaymentSuccess }) {
+export default function PaymentModal({ isOpen, onClose, bill, onPaymentSuccess, onViewReceipt }) {
   const [selectedApp, setSelectedApp] = useState('GPAY');
   const [isProcessing, setIsProcessing] = useState(false);
   const [receipt, setReceipt] = useState(null);
@@ -62,6 +63,29 @@ export default function PaymentModal({ isOpen, onClose, bill, onPaymentSuccess }
     setReceipt(null);
     setError(null);
     onClose();
+  };
+
+  const handleOpenReceipt = () => {
+    const receiptData = receipt?.receipt;
+    handleClose();
+    if (onViewReceipt) {
+      onViewReceipt(bill.id, receiptData);
+    }
+  };
+
+  const getSplitRailDescription = () => {
+    switch (bill.bill_type) {
+      case 'RENT':
+        return 'Direct to Landlord Bank VPA (Rent Settlement)';
+      case 'ELECTRICITY':
+        return 'Direct to DISCOM Sub-Meter Rail';
+      case 'WATER':
+        return 'Direct to Municipal Water Board Rail';
+      case 'MAINTENANCE':
+        return 'Direct to Society Maintenance Fund';
+      default:
+        return 'Direct NPCI Certified Settlement Rail';
+    }
   };
 
   return (
@@ -123,12 +147,22 @@ export default function PaymentModal({ isOpen, onClose, bill, onPaymentSuccess }
               </div>
             </div>
 
-            <button
-              onClick={handleClose}
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all"
-            >
-              Done &bull; Return to Home
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={handleOpenReceipt}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 transition-all"
+              >
+                <FileText className="w-4 h-4" />
+                <span>View & Download Official Receipt</span>
+              </button>
+
+              <button
+                onClick={handleClose}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+              >
+                Done &bull; Return to Home
+              </button>
+            </div>
           </div>
         ) : (
           /* Payment Selection Form */
@@ -153,8 +187,16 @@ export default function PaymentModal({ isOpen, onClose, bill, onPaymentSuccess }
               </div>
 
               <div className="pt-2 border-t border-indigo-500/10 flex items-center justify-between text-[11px] text-slate-400">
+                <span>Settlement Rail:</span>
+                <span className="text-slate-200 font-medium text-[11px]">{getSplitRailDescription()}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
                 <span>Direct UPI VPA:</span>
                 <span className="font-mono text-indigo-300 text-xs font-medium">{bill.payee_vpa}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-emerald-400">
+                <span>Convenience Surcharge:</span>
+                <span className="font-mono font-semibold">₹0.00 (Zero Fee)</span>
               </div>
             </div>
 

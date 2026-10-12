@@ -12,10 +12,12 @@ import {
   RefreshCw, 
   ShieldCheck,
   CreditCard,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  Download
 } from 'lucide-react';
 
-export default function ResidentHomeView({ homeData, onSyncMeter, onPayBill }) {
+export default function ResidentHomeView({ homeData, onSyncMeter, onPayBill, onViewReceipt }) {
   const [syncing, setSyncing] = useState(false);
   const flat = homeData?.active_flat;
   const bills = homeData?.bills || [];
@@ -239,9 +241,14 @@ export default function ResidentHomeView({ homeData, onSyncMeter, onPayBill }) {
                     Pay
                   </button>
                 ) : (
-                  <span className="text-emerald-400 font-mono text-xs flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                  </span>
+                  <button
+                    onClick={() => onViewReceipt && onViewReceipt(bill.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all shadow-sm group"
+                    title="View & Download Official Receipt"
+                  >
+                    <FileText className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                    <span>Receipt</span>
+                  </button>
                 )}
               </div>
             </div>

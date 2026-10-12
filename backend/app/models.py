@@ -101,6 +101,10 @@ class PayBillRequest(BaseModel):
     upi_app: Optional[str] = "GPAY"
     simulated_upi_pin: Optional[str] = "1234"
 
+class EmailReceiptRequest(BaseModel):
+    bill_id: str
+    email: Optional[str] = None
+
 class ConsumerHomeFeed(BaseModel):
     active_flat: FlatModel
     user_name: str

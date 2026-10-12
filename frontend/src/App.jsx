@@ -4,6 +4,7 @@ import ConsumerNav from './components/ConsumerNav';
 import UnderTheHoodDrawer from './components/UnderTheHoodDrawer';
 import PaymentModal from './components/PaymentModal';
 import JoinInviteModal from './components/JoinInviteModal';
+import ReceiptModal from './components/ReceiptModal';
 import ResidentHomeView from './pages/ResidentHomeView';
 import SmartMetersView from './pages/SmartMetersView';
 import ExpenseRadarView from './pages/ExpenseRadarView';
@@ -19,12 +20,15 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Inspector Drawer, Payment Modal, & Join Invite Modal State
+  // Inspector Drawer, Payment Modal, Join Invite Modal, & Receipt Modal State
   const [isSecurityDrawerOpen, setIsSecurityDrawerOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedBillForPayment, setSelectedBillForPayment] = useState(null);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [initialInviteCode, setInitialInviteCode] = useState('');
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [activeReceiptBillId, setActiveReceiptBillId] = useState(null);
+  const [activeReceiptData, setActiveReceiptData] = useState(null);
 
   const fetchHomeData = async (targetFlat = activeFlatNo) => {
     try {
@@ -79,6 +83,12 @@ export default function App() {
     setIsJoinModalOpen(true);
   };
 
+  const handleViewReceipt = (billId, preloadedReceipt = null) => {
+    setActiveReceiptBillId(billId);
+    setActiveReceiptData(preloadedReceipt || null);
+    setIsReceiptModalOpen(true);
+  };
+
   const handleJoinSuccess = async (data) => {
     if (data?.flat_no) {
       setActiveFlatNo(data.flat_no);
@@ -117,7 +127,12 @@ export default function App() {
     switch (currentTab) {
       case 'home':
         if (userRole === 'landlord') {
-          return <LandlordPortfolioView onOpenRedeemModal={handleOpenRedeemModal} />;
+          return (
+            <LandlordPortfolioView 
+              onOpenRedeemModal={handleOpenRedeemModal} 
+              onViewReceipt={handleViewReceipt}
+            />
+          );
         }
         if (userRole === 'admin') {
           return <AdminCommunityView />;
@@ -127,6 +142,7 @@ export default function App() {
             homeData={homeData}
             onSyncMeter={handleSyncMeter}
             onPayBill={handlePayBill}
+            onViewReceipt={handleViewReceipt}
           />
         );
 
@@ -144,12 +160,18 @@ export default function App() {
           <ExpenseRadarView
             homeData={homeData}
             onPayBill={handlePayBill}
+            onViewReceipt={handleViewReceipt}
           />
         );
 
       case 'community':
         if (userRole === 'landlord') {
-          return <LandlordPortfolioView onOpenRedeemModal={handleOpenRedeemModal} />;
+          return (
+            <LandlordPortfolioView 
+              onOpenRedeemModal={handleOpenRedeemModal} 
+              onViewReceipt={handleViewReceipt}
+            />
+          );
         }
         return <AdminCommunityView />;
 
@@ -158,6 +180,8 @@ export default function App() {
           <RemindersView
             homeData={homeData}
             onPayBill={handlePayBill}
+            onViewReceipt={handleViewReceipt}
+            onRefresh={() => fetchHomeData(activeFlatNo)}
           />
         );
 
@@ -167,6 +191,7 @@ export default function App() {
             homeData={homeData}
             onSyncMeter={handleSyncMeter}
             onPayBill={handlePayBill}
+            onViewReceipt={handleViewReceipt}
           />
         );
     }
@@ -210,6 +235,7 @@ export default function App() {
         onClose={() => setIsPaymentModalOpen(false)}
         bill={selectedBillForPayment}
         onPaymentSuccess={handlePaymentSuccess}
+        onViewReceipt={handleViewReceipt}
       />
 
       {/* Digital Tenant Invite Redemption Modal */}
@@ -218,6 +244,14 @@ export default function App() {
         onClose={() => setIsJoinModalOpen(false)}
         initialCode={initialInviteCode}
         onJoinSuccess={handleJoinSuccess}
+      />
+
+      {/* Official Downloadable Payment Receipt Modal */}
+      <ReceiptModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        billId={activeReceiptBillId}
+        initialReceipt={activeReceiptData}
       />
     </div>
   );

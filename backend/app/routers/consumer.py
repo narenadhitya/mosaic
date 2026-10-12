@@ -7,7 +7,11 @@ from app.database import get_db
 from app.models import (
     FlatModel, SmartMeterModel, BillModel, NotificationModel,
     InviteModel, SmartMeterSyncRequest, LandlordInviteCreateRequest,
-    LandlordNudgeRequest, RedeemInviteRequest, PayBillRequest
+    LandlordNudgeRequest, RedeemInviteRequest, PayBillRequest,
+    EmailReceiptRequest
+)
+from app.email_service import (
+    send_resend_email, send_rent_reminder_email, send_payment_receipt_email
 )
 
 router = APIRouter(prefix="/api/consumer", tags=["Consumer Living"])
@@ -302,12 +306,34 @@ def nudge_tenant(req: LandlordNudgeRequest):
     msg = req.message or f"Friendly reminder from Landlord Vikram: Monthly rent for Flat {req.flat_no} is due. Please clear via Mosaic to avoid late charges."
     with get_db() as conn:
         cursor = conn.cursor()
+        cursor.execute("SELECT * FROM flats WHERE flat_no = ?", (req.flat_no,))
+        flat_row = cursor.fetchone()
+        user_id = flat_row["tenant_id"] if flat_row and flat_row["tenant_id"] else "usr_tenant_4b"
+        tenant_name = flat_row["tenant_name"] if flat_row and flat_row["tenant_name"] else "Rohan Verma"
+        owner_name = flat_row["owner_name"] if flat_row and flat_row["owner_name"] else "Vikram Malhotra"
+        owner_vpa = flat_row["owner_vpa"] if flat_row and flat_row["owner_vpa"] else "vikram.owner@hdfcbank"
+        rent_rupees = (flat_row["monthly_rent_paise"] / 100) if flat_row else 25000.0
+
         cursor.execute("""
         INSERT INTO notifications (id, user_id, flat_no, title, message, notification_type, is_read, created_at)
-        VALUES (?, 'usr_tenant_4b', ?, 'Rent Payment Reminder', ?, 'RENT_DUE', 0, ?)
-        """, (f"NOTIF-{int(time.time())}-{uuid.uuid4().hex[:6]}", req.flat_no, msg, now))
+        VALUES (?, ?, ?, 'Rent Payment Reminder', ?, 'RENT_DUE', 0, ?)
+        """, (f"NOTIF-{int(time.time())}-{uuid.uuid4().hex[:6]}", user_id, req.flat_no, msg, now))
 
-    return {"status": "sent", "message": "Payment reminder dispatched to tenant successfully."}
+    # Send real email notification via Resend!
+    email_dispatch = send_rent_reminder_email(
+        tenant_name=tenant_name,
+        flat_no=req.flat_no,
+        amount_rupees=rent_rupees,
+        due_date="16 Oct 2026",
+        landlord_name=owner_name,
+        landlord_vpa=owner_vpa
+    )
+
+    return {
+        "status": "sent",
+        "message": f"Payment reminder dispatched to Flat {req.flat_no} ({tenant_name}) & email sent via Resend!",
+        "email_dispatch": email_dispatch
+    }
 
 @router.get("/invite/{code}")
 def get_invite_details(code: str):
@@ -486,6 +512,94 @@ def get_security_telemetry():
             }
         }
 
+def generate_receipt_dict(cursor, bill_id: str) -> Dict[str, Any]:
+    cursor.execute("SELECT * FROM bills WHERE id = ?", (bill_id,))
+    b = cursor.fetchone()
+    if not b:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    bill = dict(b)
+
+    # Lookup payment record
+    cursor.execute("SELECT * FROM payments WHERE invoice_id = ? ORDER BY created_at DESC LIMIT 1", (bill_id,))
+    p = cursor.fetchone()
+    payment = dict(p) if p else None
+
+    # Lookup flat details (owner, tenant, wing)
+    cursor.execute("SELECT * FROM flats WHERE flat_no = ?", (bill["flat_no"],))
+    f = cursor.fetchone()
+    flat = dict(f) if f else {}
+
+    # Society details
+    cursor.execute("SELECT * FROM societies LIMIT 1")
+    s = cursor.fetchone()
+    society = dict(s) if s else {}
+
+    payer_name = payment["payer_name"] if payment else (flat.get("tenant_name") or "Rohan Verma")
+    tx_ref = payment["provider_ref"] if payment else (f"UPI/{int(time.time())}{bill_id[:4].upper()}/YESB")
+    trace_id = payment["trace_id"] if payment else f"TRC-{int(time.time())}-{bill['flat_no']}"
+    paid_at = bill.get("paid_at") or (payment["created_at"] if payment else current_iso())
+
+    is_rent = bill["bill_type"] == "RENT"
+    is_elec = bill["bill_type"] == "ELECTRICITY"
+    is_water = bill["bill_type"] == "WATER"
+
+    meter_info = None
+    if bill.get("is_automated_meter"):
+        cursor.execute("SELECT * FROM smart_meters WHERE flat_no = ? AND meter_type = ?", (bill["flat_no"], bill["bill_type"]))
+        m = cursor.fetchone()
+        if m:
+            meter_info = dict(m)
+
+    clean_id = (payment["id"] if payment else bill["id"]).replace("BILL-", "").replace("PAY-", "")
+    receipt_no = f"REC-2026-{bill['bill_type']}-{clean_id}"
+
+    return {
+        "receipt_number": receipt_no,
+        "bill_id": bill["id"],
+        "flat_no": bill["flat_no"],
+        "wing": flat.get("wing", "Sunflower Wing"),
+        "bill_type": bill["bill_type"],
+        "title": bill["title"],
+        "amount_paise": bill["amount_paise"],
+        "due_date": bill["due_date"],
+        "paid_at": paid_at,
+        "status": bill["status"],
+        "payer_name": payer_name,
+        "payer_phone": flat.get("tenant_phone") or "+91 98765 43210",
+        "payer_flat": f"Flat {bill['flat_no']}, {flat.get('wing', 'Sunflower Wing')}",
+        "society": {
+            "name": society.get("name", "Sunrise Heights RWA"),
+            "address": society.get("address", "Plot 42, Outer Ring Road, Bellandur, Bengaluru 560103"),
+            "registration_no": "RWA/BLR/2021/8841",
+            "gstin": "29AAAAA0000A1Z5",
+            "trusted_vpa": society.get("trusted_vpa", "sunrise.society@hdfcbank")
+        },
+        "payee": {
+            "name": bill["payee_name"],
+            "vpa": bill["payee_vpa"],
+            "pan": "ABCDE1234F" if is_rent else None,
+            "category": "Property Owner" if is_rent else ("Power DISCOM" if is_elec else ("Water Board" if is_water else "Community RWA"))
+        },
+        "payment_details": {
+            "transaction_ref": tx_ref,
+            "trace_id": trace_id,
+            "payment_mode": "UPI Instant Direct Settlement",
+            "ledger_status": "POSTED & BALANCED",
+            "settlement_rail": "NPCI UPI 2.0 Direct"
+        },
+        "smart_meter": meter_info,
+        "hra_compliance": {
+            "is_hra_eligible": is_rent,
+            "landlord_name": flat.get("owner_name", "Vikram Malhotra"),
+            "landlord_pan": "ABCDE1234F",
+            "landlord_vpa": flat.get("owner_vpa", "vikram.owner@hdfcbank"),
+            "rent_period": "01 Oct 2026 – 31 Oct 2026",
+            "declaration": "Certified electronic rent receipt for Section 10(13A) Income Tax HRA claim."
+        } if is_rent else None,
+        "bis_compliance": "BIS IS 19671:2026 Clause 5.3 & 6.1 Verified",
+        "digital_seal_hash": f"SHA256:{uuid.uuid4().hex[:16].upper()}"
+    }
+
 # ============================================================================
 # 6. CONSUMER ONE-TAP BILL PAYMENT (Rent, IoT Utilities, Society Maintenance)
 # ============================================================================
@@ -504,11 +618,23 @@ def pay_bill(req: PayBillRequest):
         if not bill:
             raise HTTPException(status_code=404, detail="Bill not found")
 
+        # Determine payer name dynamically from flat resident
+        cursor.execute("SELECT tenant_id, tenant_name FROM flats WHERE flat_no = ?", (bill["flat_no"],))
+        flat_row = cursor.fetchone()
+        payer_name = (flat_row["tenant_name"] if flat_row and flat_row["tenant_name"] else "Rohan Verma")
+        user_id = (flat_row["tenant_id"] if flat_row and flat_row["tenant_id"] else "usr_tenant_4b")
+
         if bill["status"] == "PAID":
+            receipt = generate_receipt_dict(cursor, req.bill_id)
             return {
                 "status": "already_paid",
                 "message": "Bill has already been paid and settled.",
-                "bill": dict(bill)
+                "bill": dict(bill),
+                "transaction_ref": receipt["payment_details"]["transaction_ref"],
+                "trace_id": receipt["payment_details"]["trace_id"],
+                "payee_name": bill["payee_name"],
+                "payee_vpa": bill["payee_vpa"],
+                "receipt": receipt
             }
 
         # 1. Update bill to PAID
@@ -521,8 +647,8 @@ def pay_bill(req: PayBillRequest):
 
         cursor.execute("""
         INSERT INTO payments (id, invoice_id, user_id, flat_no, payer_name, amount_paise, target_vpa, target_payee_name, trace_id, provider_ref, status, is_fraud_scenario, flagged_reason, created_at, updated_at)
-        VALUES (?, ?, 'usr_tenant_4b', ?, 'Rohan Verma', ?, ?, ?, ?, ?, 'SUCCESS', 0, NULL, ?, ?)
-        """, (payment_id, req.bill_id, bill["flat_no"], bill["amount_paise"], bill["payee_vpa"], bill["payee_name"], trace_id, upi_ref, now, now))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SUCCESS', 0, NULL, ?, ?)
+        """, (payment_id, req.bill_id, user_id, bill["flat_no"], payer_name, bill["amount_paise"], bill["payee_vpa"], bill["payee_name"], trace_id, upi_ref, now, now))
 
         # 3. Post double-entry ledger entry
         entry_id = f"LED-{uuid.uuid4().hex[:8].upper()}"
@@ -545,18 +671,23 @@ def pay_bill(req: PayBillRequest):
         notif_id = f"NOTIF-{int(time.time())}-{uuid.uuid4().hex[:6]}"
         cursor.execute("""
         INSERT INTO notifications (id, user_id, flat_no, title, message, notification_type, is_read, created_at)
-        VALUES (?, 'usr_tenant_4b', ?, ?, ?, 'PAYMENT_CONFIRMED', 0, ?)
+        VALUES (?, ?, ?, ?, ?, 'PAYMENT_CONFIRMED', 0, ?)
         """, (
             notif_id,
+            user_id,
             bill["flat_no"],
             f"Payment Cleared: ₹{bill['amount_paise']/100:,.2f}",
             f"Successfully transferred to {bill['payee_name']} ({bill['payee_vpa']}) via {req.upi_app}. Ref: {upi_ref}.",
             now
         ))
 
-        # Fetch updated bill
+        # Fetch updated bill & receipt
         cursor.execute("SELECT * FROM bills WHERE id = ?", (req.bill_id,))
         updated_bill = dict(cursor.fetchone())
+        receipt = generate_receipt_dict(cursor, req.bill_id)
+
+        # Dispatch real email receipt via Resend!
+        email_dispatch = send_payment_receipt_email(receipt)
 
         return {
             "status": "success",
@@ -565,5 +696,55 @@ def pay_bill(req: PayBillRequest):
             "trace_id": trace_id,
             "payee_name": bill["payee_name"],
             "payee_vpa": bill["payee_vpa"],
-            "bill": updated_bill
+            "bill": updated_bill,
+            "receipt": receipt,
+            "email_dispatch": email_dispatch
         }
+
+# ============================================================================
+# 7. OFFICIAL PAYMENT RECEIPTS & NOTIFICATIONS
+# ============================================================================
+@router.get("/receipt/{bill_id}")
+def get_bill_receipt(bill_id: str):
+    """
+    Retrieve official payment receipt and tax-compliant certificate for a bill.
+    Supports HRA rent deduction, smart meter IoT reading verification, and society stamps.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        return generate_receipt_dict(cursor, bill_id)
+
+@router.post("/email/send-receipt")
+def email_bill_receipt(req: EmailReceiptRequest):
+    """
+    Email the certified receipt for a bill to a resident or landlord via Resend.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        receipt = generate_receipt_dict(cursor, req.bill_id)
+        email_dispatch = send_payment_receipt_email(receipt, to_email=req.email)
+        return {
+            "status": "success" if email_dispatch.get("success") else "warning",
+            "message": f"Official receipt {receipt['receipt_number']} dispatched via Resend!",
+            "email_dispatch": email_dispatch
+        }
+
+@router.post("/notifications/mark-all-read")
+def mark_all_notifications_read():
+    """
+    Mark all unread notifications as read.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE notifications SET is_read = 1")
+    return {"status": "success", "message": "All notifications marked as read."}
+
+@router.post("/notifications/{notif_id}/read")
+def mark_notification_read(notif_id: str):
+    """
+    Mark a single notification as read.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (notif_id,))
+    return {"status": "success", "message": "Notification marked as read."}

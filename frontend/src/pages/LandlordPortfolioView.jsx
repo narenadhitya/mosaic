@@ -11,10 +11,12 @@ import {
   AlertTriangle, 
   Copy, 
   Check, 
-  ShieldCheck 
+  ShieldCheck,
+  FileText,
+  Download
 } from 'lucide-react';
 
-export default function LandlordPortfolioView({ onOpenRedeemModal }) {
+export default function LandlordPortfolioView({ onOpenRedeemModal, onViewReceipt }) {
   const [portfolio, setPortfolio] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -179,13 +181,24 @@ export default function LandlordPortfolioView({ onOpenRedeemModal }) {
             {/* Actions */}
             <div className="flex items-center justify-between pt-1">
               {flat.is_occupied ? (
-                <button
-                  onClick={() => handleSendNudge(flat.flat_no)}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
-                >
-                  <Send className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Send Rent Payment Reminder</span>
-                </button>
+                flat.rent_status === 'PAID' ? (
+                  <button
+                    onClick={() => onViewReceipt && onViewReceipt(`BILL-RENT-${flat.flat_no}`)}
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-semibold border border-emerald-500/30 transition-all shadow-sm group"
+                    title="Download Official Tenant Rent Receipt"
+                  >
+                    <FileText className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                    <span>Download Rent Receipt</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleSendNudge(flat.flat_no)}
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
+                  >
+                    <Send className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Send Rent Payment Reminder</span>
+                  </button>
+                )
               ) : (
                 <button
                   onClick={() => {

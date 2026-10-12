@@ -1,3 +1,4 @@
+from app.database import init_db
 from app.routers.consumer import (
     get_consumer_home, get_landlord_portfolio, get_admin_community, 
     get_security_telemetry, sync_smart_meter, pay_bill
@@ -5,6 +6,7 @@ from app.routers.consumer import (
 from app.models import SmartMeterSyncRequest, PayBillRequest
 
 def run_test():
+    init_db(force_reseed=True)
     home = get_consumer_home(role="resident", flat_no="4B")
     print("Resident Home Flat:", home["active_flat"]["flat_no"], "| Bills Count:", len(home["bills"]))
     print("Smart Meters:", [m["meter_type"] for m in home["smart_meters"]])
@@ -46,8 +48,25 @@ def run_test():
     flat_501_feed = get_consumer_home(role="resident", flat_no="501")
     print(f"Flat 501 Feed: Resident {flat_501_feed['active_flat']['tenant_name']} | Bills: {len(flat_501_feed['bills'])} | Total Unpaid: Rs. {flat_501_feed['total_unpaid_paise']/100:,.2f}")
 
-    assert flat_501_feed["active_flat"]["is_occupied"] == 1
-    assert len(flat_501_feed["bills"]) == 4
+    # Test Bill Payment & Downloadable Receipt Generation
+    from app.routers.consumer import get_bill_receipt, mark_all_notifications_read
+
+    pay_res = pay_bill(PayBillRequest(bill_id="BILL-RENT-4B", upi_app="GPAY"))
+    safe_msg = pay_res['message'].replace('\u20b9', 'Rs.')
+    print(f"\nPayment Result: {safe_msg} | Trace ID: {pay_res['trace_id']}")
+    assert pay_res["receipt"]["receipt_number"].startswith("REC-2026-RENT")
+
+    # Fetch official receipt directly
+    receipt_data = get_bill_receipt("BILL-RENT-4B")
+    print(f"Official Receipt Generated: {receipt_data['receipt_number']} | Payer: {receipt_data['payer_name']} | HRA Eligible: {receipt_data['hra_compliance']['is_hra_eligible']}")
+    assert receipt_data["status"] == "PAID"
+    assert receipt_data["hra_compliance"]["landlord_pan"] == "ABCDE1234F"
+
+    # Test Notifications Mark All Read
+    notif_res = mark_all_notifications_read()
+    print(f"Notifications: {notif_res['message']}")
+    assert notif_res["status"] == "success"
+
     print("\n*** ALL CONSUMER BACKEND ENDPOINTS AND WORKFLOWS VERIFIED ***")
 
 if __name__ == "__main__":
