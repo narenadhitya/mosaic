@@ -9,10 +9,25 @@ import {
   Sparkles 
 } from 'lucide-react';
 
-export default function Header({ userRole, setUserRole, unreadCount, onOpenSecurityDrawer, onOpenNotifications }) {
+export default function Header({ 
+  userRole, 
+  setUserRole, 
+  activeFlatNo = '4B',
+  activeResidentName,
+  onOpenJoinModal,
+  unreadCount, 
+  onOpenSecurityDrawer, 
+  onOpenNotifications 
+}) {
   const personas = [
-    { id: 'resident', name: 'Rohan Verma', label: 'Resident (Flat 4B)', icon: Home, badge: 'Tenant' },
-    { id: 'landlord', name: 'Vikram Malhotra', label: 'Landlord (Flat 4B Owner)', icon: Key, badge: 'Owner' },
+    { 
+      id: 'resident', 
+      name: activeResidentName || (activeFlatNo === '501' ? 'Ananya Sharma' : 'Rohan Verma'), 
+      label: `Resident (Flat ${activeFlatNo})`, 
+      icon: Home, 
+      badge: 'Tenant' 
+    },
+    { id: 'landlord', name: 'Vikram Malhotra', label: 'Landlord (Flat 4B & 501)', icon: Key, badge: 'Owner' },
     { id: 'admin', name: 'R. Sundaram', label: 'Society Admin (RWA Desk)', icon: Building2, badge: 'Secretary' },
   ];
 
@@ -41,6 +56,17 @@ export default function Header({ userRole, setUserRole, unreadCount, onOpenSecur
 
       {/* Right Controls: Persona Switcher, Notification Bell, Security Shield */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* Enter Invite Code / Join Flat Button */}
+        <button
+          onClick={onOpenJoinModal}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 hover:text-white border border-indigo-500/30 transition-all shadow-sm group"
+          title="Onboard or switch unit using a digital invite code"
+        >
+          <Key className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+          <span className="hidden sm:inline">Join Flat</span>
+          <span className="text-[10px] bg-indigo-500/20 px-1.5 py-0.5 rounded font-mono hidden md:inline">Invite Code</span>
+        </button>
+
         {/* Under the Hood Technical Showcase Button */}
         <button
           onClick={onOpenSecurityDrawer}
@@ -49,7 +75,7 @@ export default function Header({ userRole, setUserRole, unreadCount, onOpenSecur
         >
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
           <span className="hidden md:inline">Under The Hood</span>
-          <span className="text-[10px] font-mono opacity-80 hidden lg:inline">&bull; BIS &bull; Graph &bull; Merkle</span>
+          <span className="text-[10px] font-mono opacity-80 hidden lg:inline">&bull; BIS &bull; Merkle &bull; DPDP</span>
         </button>
 
         {/* Notification Bell */}

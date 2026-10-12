@@ -9,7 +9,6 @@ A modern, consumer-first apartment and gated community living platform inspired 
 - **Owner & Admin Operations:** Landlords track tenant rent clearing and utility balances across all units.
 - **Institutional-Grade Backend Security (Under the Hood):**
   - **BIS IS 19671:2026 QR Shield:** Background validation of payment QR intents to prevent code tampering.
-  - **Payment Knowledge Graph:** Network intelligence detecting structural payee substitution in the background.
   - **Merkle Audit Forest:** Cryptographic batch sealing (IS/ISO 27001 Control A.8.15) for tamper-evident financial logs.
   - **DPDP Act 2023 Consent Ledger:** Resident data privacy and PII minimization.
   - **Sarvam AI Copilot:** Voice and chat assistant in Indian languages for billing queries.

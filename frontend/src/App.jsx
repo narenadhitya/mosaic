@@ -3,6 +3,7 @@ import Header from './components/Header';
 import ConsumerNav from './components/ConsumerNav';
 import UnderTheHoodDrawer from './components/UnderTheHoodDrawer';
 import PaymentModal from './components/PaymentModal';
+import JoinInviteModal from './components/JoinInviteModal';
 import ResidentHomeView from './pages/ResidentHomeView';
 import SmartMetersView from './pages/SmartMetersView';
 import ExpenseRadarView from './pages/ExpenseRadarView';
@@ -12,21 +13,24 @@ import RemindersView from './pages/RemindersView';
 
 export default function App() {
   const [userRole, setUserRole] = useState('resident'); // 'resident', 'landlord', 'admin'
+  const [activeFlatNo, setActiveFlatNo] = useState('4B');
   const [currentTab, setCurrentTab] = useState('home'); // 'home', 'utilities', 'expenses', 'community', 'reminders'
   const [homeData, setHomeData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Inspector Drawer & Payment Modal State
+  // Inspector Drawer, Payment Modal, & Join Invite Modal State
   const [isSecurityDrawerOpen, setIsSecurityDrawerOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedBillForPayment, setSelectedBillForPayment] = useState(null);
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [initialInviteCode, setInitialInviteCode] = useState('');
 
-  const fetchHomeData = async () => {
+  const fetchHomeData = async (targetFlat = activeFlatNo) => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/consumer/home?role=${userRole}&flat_no=4B`);
+      const res = await fetch(`/api/consumer/home?role=${userRole}&flat_no=${targetFlat}`);
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
       const data = await res.json();
       setHomeData(data);
@@ -39,21 +43,22 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchHomeData();
-  }, [userRole]);
+    fetchHomeData(activeFlatNo);
+  }, [userRole, activeFlatNo]);
 
-  const handleSyncMeter = async (meterType) => {
+  const handleSyncMeter = async (meterType, loadProfile = 'NORMAL') => {
     try {
       const res = await fetch('/api/consumer/smart-meter/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          flat_no: '4B',
+          flat_no: activeFlatNo,
           meter_type: meterType,
+          load_profile: loadProfile,
         }),
       });
       if (res.ok) {
-        await fetchHomeData();
+        await fetchHomeData(activeFlatNo);
       }
     } catch (err) {
       console.error('Meter sync failed:', err);
@@ -66,7 +71,21 @@ export default function App() {
   };
 
   const handlePaymentSuccess = async () => {
-    await fetchHomeData();
+    await fetchHomeData(activeFlatNo);
+  };
+
+  const handleOpenRedeemModal = (code) => {
+    setInitialInviteCode(code || '');
+    setIsJoinModalOpen(true);
+  };
+
+  const handleJoinSuccess = async (data) => {
+    if (data?.flat_no) {
+      setActiveFlatNo(data.flat_no);
+    }
+    setUserRole('resident');
+    setCurrentTab('home');
+    await fetchHomeData(data?.flat_no || activeFlatNo);
   };
 
   const renderContent = () => {
@@ -85,7 +104,7 @@ export default function App() {
           <div className="font-bold text-sm">Connection Notice</div>
           <p className="text-xs text-rose-200/80">{error}</p>
           <button
-            onClick={fetchHomeData}
+            onClick={() => fetchHomeData(activeFlatNo)}
             className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold"
           >
             Retry Connection
@@ -98,7 +117,7 @@ export default function App() {
     switch (currentTab) {
       case 'home':
         if (userRole === 'landlord') {
-          return <LandlordPortfolioView />;
+          return <LandlordPortfolioView onOpenRedeemModal={handleOpenRedeemModal} />;
         }
         if (userRole === 'admin') {
           return <AdminCommunityView />;
@@ -116,6 +135,7 @@ export default function App() {
           <SmartMetersView
             meters={homeData?.smart_meters}
             onSyncMeter={handleSyncMeter}
+            flatNo={activeFlatNo}
           />
         );
 
@@ -129,7 +149,7 @@ export default function App() {
 
       case 'community':
         if (userRole === 'landlord') {
-          return <LandlordPortfolioView />;
+          return <LandlordPortfolioView onOpenRedeemModal={handleOpenRedeemModal} />;
         }
         return <AdminCommunityView />;
 
@@ -158,6 +178,9 @@ export default function App() {
       <Header
         userRole={userRole}
         setUserRole={setUserRole}
+        activeFlatNo={activeFlatNo}
+        activeResidentName={homeData?.user_name}
+        onOpenJoinModal={() => handleOpenRedeemModal('')}
         unreadCount={homeData?.unread_notifications_count || 0}
         onOpenSecurityDrawer={() => setIsSecurityDrawerOpen(true)}
         onOpenNotifications={() => setCurrentTab('reminders')}
@@ -187,6 +210,14 @@ export default function App() {
         onClose={() => setIsPaymentModalOpen(false)}
         bill={selectedBillForPayment}
         onPaymentSuccess={handlePaymentSuccess}
+      />
+
+      {/* Digital Tenant Invite Redemption Modal */}
+      <JoinInviteModal
+        isOpen={isJoinModalOpen}
+        onClose={() => setIsJoinModalOpen(false)}
+        initialCode={initialInviteCode}
+        onJoinSuccess={handleJoinSuccess}
       />
     </div>
   );

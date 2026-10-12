@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.database import init_db
-from app.routers import health, consumer, dashboard, invoices, payments, transactions, graph, qr, merkle, dpdp, recon
+from app.routers import health, consumer, dashboard, invoices, payments, transactions, qr, merkle, dpdp, recon
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,7 +32,6 @@ app.include_router(dashboard.router)
 app.include_router(invoices.router)
 app.include_router(payments.router)
 app.include_router(transactions.router)
-app.include_router(graph.router)
 app.include_router(qr.router)
 app.include_router(merkle.router)
 app.include_router(dpdp.router)

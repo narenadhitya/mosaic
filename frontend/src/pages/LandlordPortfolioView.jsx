@@ -14,7 +14,7 @@ import {
   ShieldCheck 
 } from 'lucide-react';
 
-export default function LandlordPortfolioView() {
+export default function LandlordPortfolioView({ onOpenRedeemModal }) {
   const [portfolio, setPortfolio] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -226,22 +226,33 @@ export default function LandlordPortfolioView() {
                 <span className="text-[10px] font-mono bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">
                   {inv.status}
                 </span>
-                <button
-                  onClick={() => copyToClipboard(inv.invite_code)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-all"
-                >
-                  {copiedCode === inv.invite_code ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Copy Link</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onOpenRedeemModal && onOpenRedeemModal(inv.invite_code)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-semibold transition-all shadow-sm"
+                    title="Test redeeming this code as a tenant"
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                    <span>Test Onboard</span>
+                  </button>
+
+                  <button
+                    onClick={() => copyToClipboard(inv.invite_code)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-all"
+                  >
+                    {copiedCode === inv.invite_code ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Copy Link</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           ))}

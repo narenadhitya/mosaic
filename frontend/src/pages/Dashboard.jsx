@@ -48,7 +48,7 @@ export default function Dashboard({ stats, onNavigate, onRefresh }) {
             Operations & Intelligence Dashboard
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Real-time financial collection metrics, knowledge graph anomalies, and compliance anchors for {stats?.society_name || 'Sunrise Housing Society'}.
+            Real-time financial collection metrics, automated smart meters, and compliance anchors for {stats?.society_name || 'Sunrise Housing Society'}.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -81,7 +81,7 @@ export default function Dashboard({ stats, onNavigate, onRefresh }) {
         <MetricCard
           title="Flagged Anomalies"
           value={stats?.flagged_anomalies_count || 0}
-          subtext="Graph Payee Mismatches"
+          subtext="Security Payee Flags"
           icon={AlertOctagon}
           color="rose"
         />
@@ -238,12 +238,6 @@ export default function Dashboard({ stats, onNavigate, onRefresh }) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => onNavigate('graph')}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/30 transition-all"
-            >
-              Payment Graph
-            </button>
             <button
               onClick={() => onNavigate('qr')}
               className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 transition-all"

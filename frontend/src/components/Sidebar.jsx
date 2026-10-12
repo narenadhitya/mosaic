@@ -17,7 +17,6 @@ export default function Sidebar({ currentTab, setCurrentTab, userRole }) {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'invoices', label: 'Invoices', icon: FileText },
     { id: 'transactions', label: 'Transactions', icon: Receipt },
-    { id: 'graph', label: 'Payment Graph', icon: Network, badge: 'Fraud Radar' },
     { id: 'qr', label: 'QR Guard', icon: QrCode, badge: 'IS 19671' },
     { id: 'merkle', label: 'Merkle Audit', icon: GitCommit, badge: 'ISO 27001' },
     { id: 'copilot', label: 'AI Copilot', icon: Bot, badge: 'Sarvam' },

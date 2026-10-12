@@ -79,6 +79,7 @@ class SmartMeterSyncRequest(BaseModel):
     flat_no: str
     meter_type: str # "ELECTRICITY" or "WATER"
     simulated_increment: Optional[float] = None
+    load_profile: Optional[str] = "NORMAL" # "NORMAL", "AC_HEAVY", "GEYSER_HEAVY", "WATER_PUMP"
 
 class LandlordInviteCreateRequest(BaseModel):
     flat_no: str
@@ -117,7 +118,6 @@ class ConsumerHomeFeed(BaseModel):
 
 class UnderTheHoodTelemetry(BaseModel):
     bis_qr_status: Dict[str, Any]
-    knowledge_graph: Dict[str, Any]
     merkle_epoch: Dict[str, Any]
     dpdp_consent: Dict[str, Any]
     ledger_integrity: Dict[str, Any]

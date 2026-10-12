@@ -9,7 +9,6 @@ from app.models import (
     InviteModel, SmartMeterSyncRequest, LandlordInviteCreateRequest,
     LandlordNudgeRequest, RedeemInviteRequest, PayBillRequest
 )
-from app.graph_engine import analyze_payment_graph
 
 router = APIRouter(prefix="/api/consumer", tags=["Consumer Living"])
 
@@ -64,7 +63,7 @@ def get_consumer_home(
         unread_count = sum(1 for n in notifications if not n["is_read"])
 
         # Determine user name based on persona
-        user_name = "Rohan Verma"
+        user_name = flat_dict.get("resident_name") or "Rohan Verma"
         if role == "landlord":
             user_name = "Vikram Malhotra"
         elif role == "admin":
@@ -83,14 +82,89 @@ def get_consumer_home(
         }
 
 # ============================================================================
-# 2. LIVE SMART METER IOT SIMULATOR SYNC
+# 2. LIVE SMART METER IOT SIMULATOR SYNC & TELEMETRY
 # ============================================================================
+@router.get("/smart-meter/telemetry")
+def get_smart_meter_telemetry(
+    flat_no: str = Query("4B", description="Flat number"), 
+    meter_type: str = Query("ELECTRICITY", description="ELECTRICITY or WATER")
+):
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM smart_meters WHERE flat_no = ? AND meter_type = ?", (flat_no, meter_type))
+        m = cursor.fetchone()
+        if not m:
+            raise HTTPException(status_code=404, detail="Meter not found")
+        meter = dict(m)
+
+    is_elec = meter_type == "ELECTRICITY"
+    hourly_hours = [f"{h:02d}:00" for h in range(24)]
+
+    if is_elec:
+        curve = [
+            0.5, 0.4, 0.4, 0.3, 0.4, 0.6,
+            1.2, 1.8, 1.6, 1.2, 1.1, 1.4,
+            2.2, 2.4, 2.1, 1.8, 1.5, 1.7,
+            2.3, 2.6, 2.5, 2.0, 1.4, 0.8
+        ]
+        hourly_data = [{"hour": h, "value": curve[i], "unit": "kWh"} for i, h in enumerate(hourly_hours)]
+        slabs = [
+            {"tier": "Tier 1 (Base)", "range": "0 - 50 kWh", "rate_rupees": 4.15, "description": "Subsidized lifeline slab"},
+            {"tier": "Tier 2 (Standard)", "range": "51 - 100 kWh", "rate_rupees": 5.60, "description": "Standard residential domestic tier"},
+            {"tier": "Tier 3 (High Consumption)", "range": "> 100 kWh", "rate_rupees": 8.00, "description": "Non-telescopic domestic tariff (BESCOM LT-2)"}
+        ]
+        profiles = [
+            {"id": "NORMAL", "label": "Normal Base Load", "delta": "+1.8 kWh", "desc": "Refrigeration, fans, LED lighting"},
+            {"id": "AC_HEAVY", "label": "Multi-Split AC Surge", "delta": "+14.2 kWh", "desc": "1.5T 5-star inverter ACs cooling 3 BHK"},
+            {"id": "GEYSER_HEAVY", "label": "Morning Geyser Surge", "delta": "+8.5 kWh", "desc": "25L storage water heater 2000W heating cycle"}
+        ]
+        hardware = {
+            "model": "Schneider Electric PM5300 IoT Sub-Meter",
+            "protocol": "Zigbee 3.0 / MQTT over TLS",
+            "rssi": "-67 dBm (Strong Mesh)",
+            "power_source": "AC Mains 230V ± 5%",
+            "accuracy_class": "IEC 62053-22 Class 0.5S",
+            "last_calibrated": "15 Jan 2026"
+        }
+    else:
+        curve = [
+            0.0, 0.0, 0.0, 0.0, 0.1, 0.4,
+            1.2, 1.6, 0.9, 0.5, 0.4, 0.6,
+            0.5, 0.4, 0.3, 0.3, 0.4, 0.8,
+            1.4, 1.5, 1.1, 0.6, 0.2, 0.1
+        ]
+        hourly_data = [{"hour": h, "value": curve[i], "unit": "kL"} for i, h in enumerate(hourly_hours)]
+        slabs = [
+            {"tier": "Tier 1 (Essential)", "range": "0 - 8 kL", "rate_rupees": 35.00, "description": "BWSSB Lifeline domestic supply"},
+            {"tier": "Tier 2 (Moderate)", "range": "9 - 15 kL", "rate_rupees": 60.00, "description": "Normal urban apartment family consumption"},
+            {"tier": "Tier 3 (High Usage)", "range": "> 15 kL", "rate_rupees": 90.00, "description": "Tiered conservation conservation tariff"}
+        ]
+        profiles = [
+            {"id": "NORMAL", "label": "Normal Usage", "delta": "+0.4 kL", "desc": "Kitchen, drinking RO and taps"},
+            {"id": "WATER_PUMP", "label": "Overhead Tank Inflow", "delta": "+3.2 kL", "desc": "Submersible pump cycle into private flat loft tank"}
+        ]
+        hardware = {
+            "model": "Itron Cyble Ultrasonic Water Flow Sensor",
+            "protocol": "LoRaWAN 865 MHz (India ISM)",
+            "rssi": "-74 dBm (Stable Long-Range)",
+            "power_source": "Lithium Thionyl Chloride 3.6V (10-yr battery)",
+            "accuracy_class": "ISO 4064 Class C (R400)",
+            "last_calibrated": "20 Feb 2026"
+        }
+
+    return {
+        "meter": meter,
+        "hardware": hardware,
+        "tariff_slabs": slabs,
+        "load_profiles": profiles,
+        "hourly_data": hourly_data
+    }
+
 @router.post("/smart-meter/sync")
 def sync_smart_meter(req: SmartMeterSyncRequest):
     """
     Simulates automated IoT telemetry sync from the electricity/water meter.
-    Increments consumption, recalculates charges, updates the corresponding bill,
-    and dispatches a notification.
+    Supports distinct realistic load profiles (AC heavy, Geyser, Water pump, Normal).
     """
     with get_db() as conn:
         cursor = conn.cursor()
@@ -99,8 +173,23 @@ def sync_smart_meter(req: SmartMeterSyncRequest):
         if not meter:
             raise HTTPException(status_code=404, detail="Smart meter device not found")
 
-        # Increment readings
-        increment = req.simulated_increment or (14.2 if req.meter_type == "ELECTRICITY" else 1.2)
+        # Determine increment from profile or explicit value
+        if req.simulated_increment is not None:
+            increment = req.simulated_increment
+            profile_label = "Manual Simulation"
+        elif req.load_profile == "AC_HEAVY":
+            increment = 14.2
+            profile_label = "Multi-Split Inverter AC Surge"
+        elif req.load_profile == "GEYSER_HEAVY":
+            increment = 8.5
+            profile_label = "Morning Water Heater Surge"
+        elif req.load_profile == "WATER_PUMP":
+            increment = 3.2
+            profile_label = "Overhead Tank Pump Top-up"
+        else: # NORMAL
+            increment = 1.8 if req.meter_type == "ELECTRICITY" else 0.4
+            profile_label = "Normal Base Living Load"
+
         new_reading = round(meter["current_reading"] + increment, 1)
         new_cycle_consumption = round(meter["cycle_consumption"] + increment, 1)
         new_bill_paise = int(round(new_cycle_consumption * meter["rate_per_unit_paise"]))
@@ -133,8 +222,8 @@ def sync_smart_meter(req: SmartMeterSyncRequest):
         """, (
             f"NOTIF-{int(time.time())}-{uuid.uuid4().hex[:6]}", 
             req.flat_no,
-            f"Smart Meter Synced (+{unit_str})",
-            f"IoT device {meter['device_id']} updated reading to {new_reading} {meter['unit_label']}. Cycle total: {new_cycle_consumption} {meter['unit_label']} (₹{new_bill_paise/100:,.2f}).",
+            f"IoT Telemetry Synced: {profile_label} (+{unit_str})",
+            f"Device {meter['device_id']} logged {profile_label}. Cycle total now {new_cycle_consumption} {meter['unit_label']} (₹{new_bill_paise/100:,.2f}).",
             now
         ))
 
@@ -144,6 +233,7 @@ def sync_smart_meter(req: SmartMeterSyncRequest):
         return {
             "status": "synced",
             "meter": updated_meter,
+            "load_profile": req.load_profile or "NORMAL",
             "increment_logged": increment,
             "new_bill_paise": new_bill_paise
         }
@@ -219,12 +309,31 @@ def nudge_tenant(req: LandlordNudgeRequest):
 
     return {"status": "sent", "message": "Payment reminder dispatched to tenant successfully."}
 
+@router.get("/invite/{code}")
+def get_invite_details(code: str):
+    """
+    Look up invite details by code to display flat summary before resident joins.
+    """
+    clean_code = code.strip().upper()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        SELECT i.*, f.wing, f.bhk_type 
+        FROM invites i
+        LEFT JOIN flats f ON i.flat_no = f.flat_no
+        WHERE UPPER(i.invite_code) = ?
+        """, (clean_code,))
+        inv = cursor.fetchone()
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invite code not found or expired.")
+        return dict(inv)
+
 @router.post("/resident/redeem-invite")
 def redeem_invite(req: RedeemInviteRequest):
     now = current_iso()
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM invites WHERE invite_code = ? AND status = 'PENDING'", (req.invite_code.strip(),))
+        cursor.execute("SELECT * FROM invites WHERE UPPER(invite_code) = ? AND status = 'PENDING'", (req.invite_code.strip().upper(),))
         invite = cursor.fetchone()
         if not invite:
             raise HTTPException(status_code=400, detail="Invalid or expired invite code.")
@@ -246,11 +355,66 @@ def redeem_invite(req: RedeemInviteRequest):
         # Mark invite accepted
         cursor.execute("UPDATE invites SET status = 'ACCEPTED' WHERE id = ?", (invite["id"],))
 
+        # 1. Ensure smart meters exist for this newly occupied flat
+        cursor.execute("SELECT COUNT(*) FROM smart_meters WHERE flat_no = ?", (invite["flat_no"],))
+        if cursor.fetchone()[0] == 0:
+            elec_id = f"sm_{uuid.uuid4().hex[:6]}"
+            cursor.execute("""
+            INSERT INTO smart_meters (id, flat_no, meter_type, device_id, current_reading, unit_label, cycle_consumption, rate_per_unit_paise, calculated_bill_paise, billing_period, due_date, last_synced_at, status)
+            VALUES (?, ?, 'ELECTRICITY', ?, 145.0, 'kWh', 145.0, 800, 116000, '01 Oct 2026 - 31 Oct 2026', '2026-10-20', ?, 'SYNCED_LIVE')
+            """, (elec_id, invite["flat_no"], f"DEV-MTR-ELEC-{invite['flat_no'].replace(' ', '')}", now))
+
+            wtr_id = f"sm_{uuid.uuid4().hex[:6]}"
+            cursor.execute("""
+            INSERT INTO smart_meters (id, flat_no, meter_type, device_id, current_reading, unit_label, cycle_consumption, rate_per_unit_paise, calculated_bill_paise, billing_period, due_date, last_synced_at, status)
+            VALUES (?, ?, 'WATER', ?, 9.2, 'kL', 9.2, 6000, 55200, '01 Oct 2026 - 31 Oct 2026', '2026-10-25', ?, 'SYNCED_LIVE')
+            """, (wtr_id, invite["flat_no"], f"DEV-MTR-WTR-{invite['flat_no'].replace(' ', '')}", now))
+
+        # 2. Ensure active bills exist for this newly occupied flat
+        cursor.execute("SELECT COUNT(*) FROM bills WHERE flat_no = ?", (invite["flat_no"],))
+        if cursor.fetchone()[0] == 0:
+            # Rent
+            cursor.execute("""
+            INSERT INTO bills (id, flat_no, bill_type, title, amount_paise, due_date, payee_name, payee_vpa, status, created_at, is_automated_meter)
+            VALUES (?, ?, 'RENT', 'Monthly Apartment Rent', ?, '2026-10-16', ?, 'vikram.owner@hdfcbank', 'UNPAID', ?, 0)
+            """, (f"bill_rent_{uuid.uuid4().hex[:6]}", invite["flat_no"], invite["monthly_rent_paise"], invite["owner_name"], now))
+
+            # Electricity
+            cursor.execute("""
+            INSERT INTO bills (id, flat_no, bill_type, title, amount_paise, due_date, payee_name, payee_vpa, status, created_at, is_automated_meter)
+            VALUES (?, ?, 'ELECTRICITY', 'Smart Meter Electricity (145.0 kWh)', 116000, '2026-10-20', 'BESCOM (via Sunrise Heights RWA)', 'sunrise.society@hdfcbank', 'UNPAID', ?, 1)
+            """, (f"bill_elec_{uuid.uuid4().hex[:6]}", invite["flat_no"], now))
+
+            # Water
+            cursor.execute("""
+            INSERT INTO bills (id, flat_no, bill_type, title, amount_paise, due_date, payee_name, payee_vpa, status, created_at, is_automated_meter)
+            VALUES (?, ?, 'WATER', 'Smart Meter Water (9.2 kL)', 55200, '2026-10-25', 'BWSSB (via Sunrise Heights RWA)', 'sunrise.society@hdfcbank', 'UNPAID', ?, 1)
+            """, (f"bill_wtr_{uuid.uuid4().hex[:6]}", invite["flat_no"], now))
+
+            # Society maintenance
+            cursor.execute("""
+            INSERT INTO bills (id, flat_no, bill_type, title, amount_paise, due_date, payee_name, payee_vpa, status, created_at, is_automated_meter)
+            VALUES (?, ?, 'MAINTENANCE', 'Monthly Society Maintenance', 350000, '2026-10-30', 'Sunrise Heights RWA', 'sunrise.society@hdfcbank', 'UNPAID', ?, 0)
+            """, (f"bill_maint_{uuid.uuid4().hex[:6]}", invite["flat_no"], now))
+
+        # 3. Insert welcome notification
+        cursor.execute("""
+        INSERT INTO notifications (id, user_id, flat_no, title, message, notification_type, is_read, created_at)
+        VALUES (?, ?, ?, 'Welcome to Your New Home!', ?, 'SOCIETY_NOTICE', 0, ?)
+        """, (
+            f"NOTIF-{int(time.time())}-{uuid.uuid4().hex[:6]}",
+            user_id,
+            invite["flat_no"],
+            f"Welcome to Flat {invite['flat_no']}, {req.resident_name}! Your lease of ₹{invite['monthly_rent_paise']/100:,.0f}/month and automated smart meters are now activated.",
+            now
+        ))
+
         return {
             "status": "success",
             "message": f"Successfully joined Flat {invite['flat_no']}!",
             "flat_no": invite["flat_no"],
-            "resident_name": req.resident_name
+            "resident_name": req.resident_name,
+            "monthly_rent_paise": invite["monthly_rent_paise"]
         }
 
 # ============================================================================
@@ -300,20 +464,12 @@ def get_security_telemetry():
         cursor.execute("SELECT * FROM dpdp_logs ORDER BY timestamp DESC LIMIT 5")
         dpdp_logs = [dict(d) for d in cursor.fetchall()]
 
-        # 4. Graph Anomaly Radar
-        graph = analyze_payment_graph(include_fraud=True)
-
         return {
             "bis_qr_engine": {
                 "standard": "BIS IS 19671:2026 (ISO 5201:2024)",
                 "status": "ACTIVE_ENFORCING",
                 "rules": ["Clause 5.3 Payee Authentication", "Clause 6.1 Amount & INR Currency Integrity"],
                 "scenarios": qr_scenarios
-            },
-            "knowledge_graph": {
-                "topology_status": graph["metrics"]["topology_status"],
-                "anomalies_detected": graph["anomalies"],
-                "health_score": graph["metrics"]["health_score"]
             },
             "merkle_forest": {
                 "standard": "IS/ISO/IEC 27001:2022 Control A.8.15",

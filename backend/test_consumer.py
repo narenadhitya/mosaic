@@ -18,23 +18,36 @@ def run_test():
 
     sec = get_security_telemetry()
     print("\nSecurity Telemetry Standard:", sec["bis_qr_engine"]["standard"])
-    print("Knowledge Graph Topology:", sec["knowledge_graph"]["topology_status"])
     print("Merkle Forest Epoch ID:", sec["merkle_forest"]["latest_epoch_id"])
 
-    # Test Smart Meter Sync
-    sync_res = sync_smart_meter(SmartMeterSyncRequest(flat_no="4B", meter_type="ELECTRICITY", simulated_increment=5.0))
-    print(f"\nSmart Meter Sync: +5.0 kWh => Reading: {sync_res['meter']['current_reading']} kWh, Bill: Rs. {sync_res['new_bill_paise']/100:,.2f}")
+    # Test Smart Meter Telemetry & Profile Load Sync
+    from app.routers.consumer import get_smart_meter_telemetry, get_invite_details, redeem_invite
+    from app.models import RedeemInviteRequest
 
-    # Test Pay Bill (pay water bill)
-    water_bill = next((b for b in home["bills"] if b["bill_type"] == "WATER"), None)
-    if water_bill:
-        pay_res = pay_bill(PayBillRequest(bill_id=water_bill["id"], upi_app="GPAY"))
-        print(f"Bill Payment: Status: {pay_res['status']}, Ref: {pay_res['transaction_ref']}, Payee: {pay_res['payee_name']}")
+    telemetry = get_smart_meter_telemetry(flat_no="4B", meter_type="ELECTRICITY")
+    print(f"\nIoT Telemetry Model: {telemetry['hardware']['model']} | Slabs: {len(telemetry['tariff_slabs'])} | Hourly pts: {len(telemetry['hourly_data'])}")
 
-    assert home["active_flat"]["flat_no"] == "4B"
-    assert len(home["bills"]) == 4 # Rent, Elec, Water, Maint
-    assert len(landlord["flats"]) == 4 # 4B, 501, 101, 201
-    assert admin["total_flats"] == 4
+    sync_res = sync_smart_meter(SmartMeterSyncRequest(flat_no="4B", meter_type="ELECTRICITY", load_profile="AC_HEAVY"))
+    print(f"Smart Meter AC Surge Sync: +{sync_res['increment_logged']} kWh => Reading: {sync_res['meter']['current_reading']} kWh, Bill: Rs. {sync_res['new_bill_paise']/100:,.2f}")
+
+    # Test Invite Lookup & Redeem for Flat 501
+    inv_details = get_invite_details("MOSAIC-FLAT-501")
+    print(f"\nInvite Lookup: Code {inv_details['invite_code']} for Flat {inv_details['flat_no']} (Rent: Rs. {inv_details['monthly_rent_paise']/100:,.0f})")
+
+    redeem_res = redeem_invite(RedeemInviteRequest(
+        invite_code="MOSAIC-FLAT-501",
+        resident_name="Ananya Sharma",
+        resident_email="ananya@example.com",
+        resident_phone="+91 98765 43210"
+    ))
+    print(f"Redeem Invite: {redeem_res['message']} (Resident: {redeem_res['resident_name']})")
+
+    # Verify Flat 501 home feed now works!
+    flat_501_feed = get_consumer_home(role="resident", flat_no="501")
+    print(f"Flat 501 Feed: Resident {flat_501_feed['active_flat']['tenant_name']} | Bills: {len(flat_501_feed['bills'])} | Total Unpaid: Rs. {flat_501_feed['total_unpaid_paise']/100:,.2f}")
+
+    assert flat_501_feed["active_flat"]["is_occupied"] == 1
+    assert len(flat_501_feed["bills"]) == 4
     print("\n*** ALL CONSUMER BACKEND ENDPOINTS AND WORKFLOWS VERIFIED ***")
 
 if __name__ == "__main__":

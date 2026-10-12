@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, 
   ShieldCheck, 
-  Network, 
   GitCommit, 
   Scale, 
   AlertTriangle, 
@@ -13,7 +12,7 @@ import {
 } from 'lucide-react';
 
 export default function UnderTheHoodDrawer({ isOpen, onClose }) {
-  const [activeTab, setActiveTab] = useState('bis'); // 'bis', 'graph', 'merkle', 'dpdp'
+  const [activeTab, setActiveTab] = useState('bis'); // 'bis', 'merkle', 'dpdp'
   const [telemetry, setTelemetry] = useState(null);
   const [fraudActive, setFraudActive] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -69,7 +68,6 @@ export default function UnderTheHoodDrawer({ isOpen, onClose }) {
         <div className="flex items-center border-b border-slate-800 px-5 bg-slate-950/30 text-xs font-medium gap-1 overflow-x-auto">
           {[
             { id: 'bis', label: 'BIS IS 19671 QR', icon: Scale },
-            { id: 'graph', label: 'Knowledge Graph', icon: Network },
             { id: 'merkle', label: 'Merkle Audit (ISO 27001)', icon: GitCommit },
             { id: 'dpdp', label: 'DPDP Privacy', icon: ShieldCheck },
           ].map(t => {
@@ -141,44 +139,7 @@ export default function UnderTheHoodDrawer({ isOpen, onClose }) {
                 </div>
               )}
 
-              {/* TAB 2: KNOWLEDGE GRAPH */}
-              {activeTab === 'graph' && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-white text-sm">Payment Knowledge Graph (NetworkX)</span>
-                      <span className="font-mono text-[11px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded">
-                        Payee Anomaly Radar
-                      </span>
-                    </div>
-                    <p className="text-slate-400 leading-relaxed text-[11px]">
-                      Models the society as a graph ($$\text{Resident} \rightarrow \text{Payment} \rightarrow \text{VPA}$$). Automatically intercepts payee substitution attacks when multiple residents are tricked into routing payments to an unregistered address.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                      Live Detected Structural Findings
-                    </div>
-                    {telemetry?.knowledge_graph?.anomalies_detected?.map((a, i) => (
-                      <div key={i} className="p-3.5 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-rose-300">{a.title}</span>
-                          <span className="text-[10px] font-mono bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded">
-                            {a.severity}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-300">{a.description}</p>
-                        <div className="text-[10px] font-mono text-rose-400 mt-1">
-                          Rogue Payee Node: {a.affected_vpa} ({a.affected_payers_count} residents affected)
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 3: MERKLE AUDIT FOREST */}
+              {/* TAB 2: MERKLE AUDIT FOREST */}
               {activeTab === 'merkle' && (
                 <div className="space-y-4">
                   <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
